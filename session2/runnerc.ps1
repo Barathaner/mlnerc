@@ -5,18 +5,30 @@ $BASEDIR = "C:\Users\User\mlnerc-1"
 Write-Host "Extracting features..."
 python .\extract-features.py $BASEDIR\DDI\data\train\ > .\train.feat
 python .\extract-features.py $BASEDIR\DDI\data\devel\ > .\devel.feat
+# Define the path to the parameter configuration file
+$paramConfigFile = ".\params_crf.json"
 
-# Train CRF model
-Write-Host "Training CRF model..."
-Get-Content .\train.feat | python .\train-crf.py .\model.crf
+# Load the configuration for experiments
+$experiments = Get-Content $paramConfigFile | ConvertFrom-Json
 
-# Run CRF model
-Write-Host "Running CRF model..."
-Get-Content .\devel.feat | python .\predict.py .\model.crf > .\devel-CRF.out
+foreach ($experiment in $experiments.PSObject.Properties) {
+    $expName = $experiment.Name
+    $modelFile = ".\${expName}_model.crf"
+    $outputFile = ".\${expName}-CRF.out"
+    $statsFile = ".\${expName}-CRF.stats"
 
-# Evaluate CRF results
-Write-Host "Evaluating CRF results..."
-python .\evaluator.py NER $BASEDIR\DDI\data\devel .\devel-CRF.out > .\devel-CRF.stats
+    # Train CRF model for each experiment
+    Write-Host "Training CRF model for $expName..."
+    Get-Content .\train.feat | python .\train-crf.py $expName $modelFile
+
+    # Run CRF model for each experiment
+    Write-Host "Running CRF model for $expName..."
+    Get-Content .\devel.feat | python .\predict.py $modelFile > $outputFile
+
+    # Evaluate CRF results for each experiment
+    Write-Host "Evaluating CRF results for $expName..."
+    python .\evaluator.py NER $BASEDIR\DDI\data\devel $outputFile > $statsFile
+}
 
 # Extract Classification Features
 Get-Content .\train.feat | Where-Object { $_ -match "\S" } | ForEach-Object { $_ -replace "^[^\t]*\t[^\t]*\t[^\t]*\t[^\t]*\t", "" } | Set-Content .\train.clf.feat
